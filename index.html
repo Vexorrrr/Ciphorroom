@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>CipherRoom — E2EE Chat</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --bg: #040a0f;
+    --bg2: #060e16;
+    --panel: rgba(0,255,180,0.04);
+    --border: rgba(0,255,180,0.18);
+    --neon: #00ffb4;
+    --neon2: #00cfff;
+    --neon3: #ff00aa;
+    --dim: rgba(0,255,180,0.5);
+    --text: #c8ffe8;
+    --text2: #7ab8a0;
+    --sent-bg: rgba(0,255,180,0.13);
+    --recv-bg: rgba(0,207,255,0.09);
+    --danger: #ff003c;
+    --warn: #ffaa00;
+    --mono: 'Share Tech Mono', monospace;
+    --head: 'Orbitron', sans-serif;
+    --glow: 0 0 8px rgba(0,255,180,0.6), 0 0 20px rgba(0,255,180,0.2);
+    --glow2: 0 0 8px rgba(0,207,255,0.6), 0 0 20px rgba(0,207,255,0.2);
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--mono);
+    height: 100dvh;
+    overflow: hidden;
+    position: relative;
+  }
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.08) 2px, rgba(0,0,0,0.08) 4px);
+    pointer-events: none;
+    z-index: 9999;
+  }
+  body::after {
+    content: '';
+    position: fixed; inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 9998;
+    opacity: 0.4;
+  }
+  .screen { display: none; width: 100%; height: 100dvh; }
+  .screen.active { display: flex; }
+
+  /* ─── LANDING ─── */
+  #landing {
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: radial-gradient(ellipse at 50% 30%, rgba(0,255,180,0.06) 0%, transparent 70%),
+                radial-gradient(ellipse at 80% 80%, rgba(0,207,255,0.04) 0%, transparent 60%);
+  }
+  .logo-wrap { text-align: center; margin-bottom: 48px; animation: fadeDown 0.7s ease both; }
+  .logo-icon { font-size: 52px; line-height: 1; margin-bottom: 12px; filter: drop-shadow(0 0 16px var(--neon)); animation: pulse 3s ease-in-out infinite; }
+  .logo-title { font-family: var(--head); font-size: clamp(28px,6vw,44px); font-weight: 900; letter-spacing: 0.12em; background: linear-gradient(135deg, var(--neon), var(--neon2)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+  .logo-sub { font-size: 11px; letter-spacing: 0.3em; color: var(--text2); text-transform: uppercase; margin-top: 6px; }
+  .join-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 36px 32px;
+    width: 100%;
+    max-width: 420px;
+    backdrop-filter: blur(12px);
+    animation: fadeUp 0.7s 0.15s ease both;
+    position: relative;
+    overflow: hidden;
+  }
+  .join-card::before {
+    content: ''; position: absolute; top: -1px; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, transparent, var(--neon), transparent);
+    animation: scanH 3s linear infinite;
+  }
+  @keyframes scanH { 0%{transform:translateX(-100%)} 100%{transform:translateX(100%)} }
+  .field-group { margin-bottom: 20px; }
+  .field-label { display: block; font-size: 10px; letter-spacing: 0.25em; color: var(--neon); text-transform: uppercase; margin-bottom: 8px; }
+  .field-input { width: 100%; background: rgba(0,255,180,0.05); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; font-family: var(--mono); font-size: 15px; color: var(--text); outline: none; transition: border-color 0.2s, box-shadow 0.2s; caret-color: var(--neon); }
+  .field-input::placeholder { color: rgba(200,255,232,0.25); }
+  .field-input:focus { border-color: var(--neon); box-shadow: var(--glow); }
+  .room-input-wrap { position: relative; }
+  .room-gen-btn { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: rgba(0,255,180,0.1); border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; color: var(--neon); cursor: pointer; transition: background 0.2s; }
+  .room-gen-btn:hover { background: rgba(0,255,180,0.2); }
+  .join-btn { width: 100%; padding: 14px; background: linear-gradient(135deg, rgba(0,255,180,0.15), rgba(0,207,255,0.1)); border: 1px solid var(--neon); border-radius: 10px; font-family: var(--head); font-size: 13px; font-weight: 700; letter-spacing: 0.2em; color: var(--neon); cursor: pointer; transition: all 0.2s; text-transform: uppercase; margin-top: 8px; box-shadow: var(--glow); }
+  .join-btn:hover { background: linear-gradient(135deg, rgba(0,255,180,0.25), rgba(0,207,255,0.18)); box-shadow: 0 0 20px rgba(0,255,180,0.5), 0 0 40px rgba(0,255,180,0.2); transform: translateY(-1px); }
+  .join-btn:active { transform: translateY(0); }
+  .error-msg { color: var(--danger); font-size: 11px; margin-top: 8px; display: none; }
+  .error-msg.show { display: block; }
+  .info-row { display: flex; gap: 20px; justify-content: center; margin-top: 32px; animation: fadeUp 0.7s 0.3s ease both; }
+  .info-chip { display: flex; align-items: center; gap: 6px; font-size: 10px; letter-spacing: 0.1em; color: var(--text2); }
+  .info-chip span { font-size: 13px; }
+
+  /* ─── CHAT ─── */
+  #chat { flex-direction: row; height: 100dvh; overflow: hidden; }
+  .sidebar { width: 240px; flex-shrink: 0; border-right: 1px solid var(--border); background: rgba(0,10,16,0.8); display: flex; flex-direction: column; backdrop-filter: blur(16px); transition: transform 0.3s ease; z-index: 100; }
+  .sidebar-header { padding: 20px 16px 14px; border-bottom: 1px solid var(--border); }
+  .sb-logo { font-family: var(--head); font-size: 13px; font-weight: 700; letter-spacing: 0.15em; color: var(--neon); margin-bottom: 14px; }
+  .room-badge { background: rgba(0,255,180,0.07); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; font-size: 12px; }
+  .room-badge-label { font-size: 9px; letter-spacing: 0.2em; color: var(--text2); text-transform: uppercase; margin-bottom: 4px; }
+  .room-id-text { color: var(--neon); font-size: 13px; font-weight: bold; word-break: break-all; }
+  .room-actions { display: flex; gap: 6px; margin-top: 8px; }
+  .icon-btn { flex: 1; padding: 5px; background: rgba(0,255,180,0.06); border: 1px solid var(--border); border-radius: 6px; color: var(--text2); font-size: 12px; cursor: pointer; text-align: center; transition: all 0.15s; font-family: var(--mono); }
+  .icon-btn:hover { color: var(--neon); border-color: var(--neon); background: rgba(0,255,180,0.12); }
+  .enc-status { display: flex; align-items: center; gap: 6px; margin-top: 10px; padding: 6px 10px; background: rgba(0,255,180,0.06); border-radius: 6px; font-size: 10px; color: var(--neon); letter-spacing: 0.05em; }
+  .enc-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--neon); animation: blink 1.5s ease-in-out infinite; flex-shrink: 0; }
+  .sb-section { padding: 14px 16px 8px; font-size: 9px; letter-spacing: 0.22em; color: var(--text2); text-transform: uppercase; border-bottom: 1px solid rgba(0,255,180,0.07); }
+  .online-count { color: var(--neon); font-size: 11px; }
+  .members-list { flex: 1; overflow-y: auto; padding: 8px 12px; }
+  .member-item { display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 8px; margin-bottom: 2px; transition: background 0.15s; }
+  .member-item:hover { background: rgba(0,255,180,0.05); }
+  .member-avatar { width: 28px; height: 28px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold; font-family: var(--head); flex-shrink: 0; }
+  .member-name { font-size: 12px; color: var(--text); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .member-you { font-size: 9px; color: var(--text2); }
+  .online-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--neon); flex-shrink: 0; animation: blink 2s ease-in-out infinite; }
+  .sidebar-footer { padding: 12px 16px; border-top: 1px solid var(--border); }
+  .leave-btn { width: 100%; padding: 9px; background: rgba(255,0,60,0.08); border: 1px solid rgba(255,0,60,0.3); border-radius: 8px; color: var(--danger); font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; cursor: pointer; transition: all 0.2s; }
+  .leave-btn:hover { background: rgba(255,0,60,0.16); }
+  .chat-main { flex: 1; display: flex; flex-direction: column; min-width: 0; background: var(--bg); }
+  .chat-header { display: none; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--border); background: rgba(0,10,16,0.9); backdrop-filter: blur(12px); }
+  .hamburger { background: none; border: none; color: var(--neon); font-size: 20px; cursor: pointer; padding: 4px; }
+  .chat-header-info { flex: 1; }
+  .chat-header-room { font-size: 12px; color: var(--neon); letter-spacing: 0.1em; }
+  .chat-header-users { font-size: 10px; color: var(--text2); }
+  .messages-wrap { flex: 1; overflow-y: auto; padding: 20px 16px; display: flex; flex-direction: column; gap: 8px; scroll-behavior: smooth; }
+  .messages-wrap::-webkit-scrollbar { width: 4px; }
+  .messages-wrap::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  .sys-msg { text-align: center; font-size: 10px; letter-spacing: 0.15em; color: var(--text2); padding: 4px 0; text-transform: uppercase; }
+  .bubble-wrap { display: flex; flex-direction: column; max-width: 72%; animation: popIn 0.2s ease both; }
+  .bubble-wrap.sent { align-self: flex-end; align-items: flex-end; }
+  .bubble-wrap.recv { align-self: flex-start; align-items: flex-start; }
+  .bubble-meta { font-size: 10px; color: var(--text2); margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }
+  .bubble-meta .meta-name { color: var(--neon2); }
+  .bubble-wrap.sent .meta-name { color: var(--neon); }
+  .bubble { padding: 10px 14px; border-radius: 14px; font-size: 14px; line-height: 1.5; word-break: break-word; white-space: pre-wrap; }
+  .bubble-wrap.sent .bubble { background: var(--sent-bg); border: 1px solid rgba(0,255,180,0.25); border-bottom-right-radius: 4px; box-shadow: 0 0 12px rgba(0,255,180,0.08); }
+  .bubble-wrap.recv .bubble { background: var(--recv-bg); border: 1px solid rgba(0,207,255,0.2); border-bottom-left-radius: 4px; box-shadow: 0 0 12px rgba(0,207,255,0.06); }
+  .bubble-enc { font-size: 9px; color: var(--text2); margin-top: 3px; display: flex; align-items: center; gap: 4px; letter-spacing: 0.05em; }
+  .sd-badge { font-size: 9px; padding: 2px 6px; border-radius: 4px; background: rgba(255,0,60,0.1); border: 1px solid rgba(255,0,60,0.3); color: var(--danger); margin-left: 4px; }
+  .bubble-wrap.exploding { animation: explode 0.5s ease forwards; }
+  .typing-indicator { display: none; align-items: center; gap: 8px; font-size: 11px; color: var(--text2); padding: 4px 0; letter-spacing: 0.05em; }
+  .typing-indicator.show { display: flex; }
+  .typing-dots { display: flex; gap: 3px; }
+  .typing-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--neon2); animation: bounce 1.2s infinite; }
+  .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+  .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+  .input-area { border-top: 1px solid var(--border); background: rgba(0,10,16,0.9); backdrop-filter: blur(12px); padding: 14px 16px; }
+  .input-row { display: flex; align-items: flex-end; gap: 10px; }
+  .msg-input { flex: 1; background: rgba(0,255,180,0.05); border: 1px solid var(--border); border-radius: 12px; padding: 11px 14px; font-family: var(--mono); font-size: 14px; color: var(--text); outline: none; resize: none; max-height: 120px; line-height: 1.5; transition: border-color 0.2s, box-shadow 0.2s; caret-color: var(--neon); }
+  .msg-input::placeholder { color: rgba(200,255,232,0.2); }
+  .msg-input:focus { border-color: var(--neon); box-shadow: var(--glow); }
+  .send-btn { width: 44px; height: 44px; flex-shrink: 0; background: linear-gradient(135deg, rgba(0,255,180,0.2), rgba(0,207,255,0.15)); border: 1px solid var(--neon); border-radius: 12px; color: var(--neon); font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; box-shadow: var(--glow); }
+  .send-btn:hover { transform: scale(1.05); box-shadow: 0 0 20px rgba(0,255,180,0.5); }
+  .send-btn:active { transform: scale(0.97); }
+  .input-options { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+  .opt-btn { background: none; border: none; color: var(--text2); cursor: pointer; padding: 4px 8px; border-radius: 6px; font-family: var(--mono); font-size: 10px; letter-spacing: 0.05em; transition: all 0.15s; display: flex; align-items: center; gap: 4px; }
+  .opt-btn:hover { color: var(--neon); background: rgba(0,255,180,0.07); }
+  .opt-btn.active { color: var(--danger); }
+  .char-count { margin-left: auto; font-size: 10px; color: var(--text2); }
+
+  /* Mobile sidebar */
+  .sidebar-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 99; backdrop-filter: blur(2px); }
+
+  /* QR Overlay */
+  .overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 200; align-items: center; justify-content: center; backdrop-filter: blur(8px); }
+  .overlay.show { display: flex; }
+  .overlay-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 16px; padding: 32px; text-align: center; max-width: 320px; width: 90%; position: relative; animation: popIn 0.25s ease both; }
+  .overlay-title { font-family: var(--head); font-size: 13px; letter-spacing: 0.2em; color: var(--neon); margin-bottom: 20px; text-transform: uppercase; }
+  #qrCanvas { border-radius: 10px; border: 2px solid var(--border); background: white; padding: 8px; display: block; margin: 0 auto 16px; }
+  .overlay-close { position: absolute; top: 12px; right: 12px; background: none; border: none; color: var(--text2); font-size: 18px; cursor: pointer; }
+  .overlay-room-text { font-size: 14px; color: var(--neon); letter-spacing: 0.1em; margin-bottom: 8px; }
+  .overlay-hint { font-size: 10px; color: var(--text2); }
+
+  /* Toast */
+  .toast { position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%) translateY(20px); background: rgba(0,255,180,0.15); border: 1px solid var(--neon); border-radius: 20px; padding: 8px 20px; font-size: 12px; color: var(--neon); letter-spacing: 0.1em; opacity: 0; transition: all 0.3s; pointer-events: none; z-index: 300; white-space: nowrap; backdrop-filter: blur(8px); }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* Animations */
+  @keyframes fadeDown { from{opacity:0;transform:translateY(-20px)} to{opacity:1;transform:translateY(0)} }
+  @keyframes fadeUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+  @keyframes popIn { from{opacity:0;transform:scale(0.92)} to{opacity:1;transform:scale(1)} }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+  @keyframes pulse { 0%,100%{filter:drop-shadow(0 0 12px var(--neon))} 50%{filter:drop-shadow(0 0 24px var(--neon)) drop-shadow(0 0 48px var(--neon2))} }
+  @keyframes bounce { 0%,60%,100%{transform:translateY(0)} 30%{transform:translateY(-5px)} }
+  @keyframes explode { 0%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(1.05);filter:blur(1px)} 100%{opacity:0;transform:scale(0.8);filter:blur(4px)} }
+
+  @media (max-width: 640px) {
+    .sidebar { position: fixed; top: 0; left: 0; bottom: 0; transform: translateX(-100%); z-index: 150; }
+    .sidebar.open { transform: translateX(0); }
+    .sidebar-overlay { display: block; opacity: 0; pointer-events: none; transition: opacity 0.3s; }
+    .sidebar-overlay.show { opacity: 1; pointer-events: auto; }
+    .chat-header { display: flex; }
+    .bubble-wrap { max-width: 88%; }
+  }
+  * { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+</style>
+</head>
+<body>
+
+<!-- LANDING -->
+<div id="landing" class="screen active">
+  <div class="logo-wrap">
+    <div class="logo-icon">🔐</div>
+    <div class="logo-title">CIPHERROOM</div>
+    <div class="logo-sub">End-to-End Encrypted · Zero Logs · Anonymous</div>
+  </div>
+  <div class="join-card">
+    <div class="field-group">
+      <label class="field-label" for="usernameInput">// Callsign</label>
+      <input class="field-input" id="usernameInput" type="text" placeholder="Enter your handle..." maxlength="20" autocomplete="off" spellcheck="false"/>
+    </div>
+    <div class="field-group">
+      <label class="field-label" for="roomInput">// Room ID</label>
+      <div class="room-input-wrap">
+        <input class="field-input" id="roomInput" type="text" placeholder="e.g. 877.199.8.7" maxlength="32" autocomplete="off" spellcheck="false"/>
+        <button class="room-gen-btn" onclick="generateRoomId()">GEN</button>
+      </div>
+    </div>
+    <div class="error-msg" id="errorMsg">⚠ Please fill in all fields</div>
+    <button class="join-btn" onclick="joinRoom()">▶ ENTER ROOM</button>
+  </div>
+  <div class="info-row">
+    <div class="info-chip"><span>🔒</span> E2EE Encrypted</div>
+    <div class="info-chip"><span>👁</span> Zero Logs</div>
+    <div class="info-chip"><span>⚡</span> Real-time</div>
+  </div>
+</div>
+
+<!-- CHAT -->
+<div id="chat" class="screen">
+  <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="sb-logo">⟨ CIPHERROOM ⟩</div>
+      <div class="room-badge">
+        <div class="room-badge-label">// Room ID</div>
+        <div class="room-id-text" id="sbRoomId">—</div>
+        <div class="room-actions">
+          <button class="icon-btn" onclick="copyRoomId()">📋 COPY</button>
+          <button class="icon-btn" onclick="showQR()">◈ QR</button>
+        </div>
+      </div>
+      <div class="enc-status">
+        <div class="enc-dot"></div>
+        <span>AES-256-GCM · KEY ACTIVE</span>
+      </div>
+    </div>
+    <div class="sb-section">// ONLINE · <span class="online-count" id="onlineCount">1</span></div>
+    <div class="members-list" id="membersList"></div>
+    <div class="sidebar-footer">
+      <button class="leave-btn" onclick="leaveRoom()">✕ LEAVE ROOM</button>
+    </div>
+  </aside>
+
+  <div class="chat-main">
+    <div class="chat-header">
+      <button class="hamburger" onclick="openSidebar()">☰</button>
+      <div class="chat-header-info">
+        <div class="chat-header-room" id="headerRoomId">ROOM: —</div>
+        <div class="chat-header-users" id="headerUsers">1 online · 🔒 E2EE</div>
+      </div>
+    </div>
+    <div class="messages-wrap" id="messagesWrap"></div>
+    <div class="input-area">
+      <div class="input-row">
+        <textarea class="msg-input" id="msgInput" placeholder="Transmit encrypted message..." rows="1" maxlength="2000"></textarea>
+        <button class="send-btn" onclick="sendMessage()">➤</button>
+      </div>
+      <div class="input-options">
+        <button class="opt-btn" id="sdToggle" onclick="toggleSelfDestruct()">💣 <span id="sdLabel">PERSIST</span></button>
+        <button class="opt-btn" onclick="sendSystemBroadcast()">📡 PING</button>
+        <span class="char-count"><span id="charCount">0</span>/2000</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- QR Overlay -->
+<div class="overlay" id="qrOverlay">
+  <div class="overlay-card">
+    <button class="overlay-close" onclick="closeQR()">✕</button>
+    <div class="overlay-title">// Scan to Join</div>
+    <canvas id="qrCanvas" width="180" height="180"></canvas>
+    <div class="overlay-room-text" id="qrRoomText"></div>
+    <div class="overlay-hint">Share this Room ID to invite others</div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- Socket.io client (served by the backend) -->
+<script src="/socket.io/socket.io.js"></script>
+<!-- App logic -->
+<script src="/script.js"></script>
+</body>
+</html>
